@@ -4,7 +4,7 @@ import csv
 import io
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from typing import Iterable
 
@@ -410,7 +410,7 @@ def evaluate_compliance(contact: dict) -> dict:
         "can_email": consent in {"express", "implied"} and "Role mailbox should be suppressed or manually reviewed" not in flags,
         "audit_event": {
             "action": "compliance_evaluated",
-            "at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "at": datetime.now(UTC).isoformat(timespec="seconds"),
             "actor": contact.get("owner") or "system",
         },
     }
