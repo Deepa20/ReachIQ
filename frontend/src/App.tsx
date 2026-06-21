@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
 type Contact = {
@@ -67,6 +67,14 @@ type SignalAccount = {
     recommended_opening_line: string;
     requires_realtime_alert: boolean;
   }>;
+};
+
+type SupabaseStatus = {
+  configured: boolean;
+  mode: string;
+  missing?: string[];
+  key_source?: string;
+  message: string;
 };
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -207,10 +215,35 @@ function App() {
   const [tone, setTone] = useState("consultative");
   const [language, setLanguage] = useState("English");
   const [apiStatus, setApiStatus] = useState("Ready with demo data");
+  const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus>({
+    configured: false,
+    mode: "unknown",
+    message: "Supabase status not checked yet"
+  });
   const [brand, setBrand] = useState({ agency: "Northstar B2B", product: "PipelineAI", colour: "#2454ff" });
 
   const hotContacts = useMemo(() => result.contacts.filter((contact) => contact.temperature === "HOT"), [result.contacts]);
   const selectedOutreach = hotContacts[0]?.outreach;
+
+  useEffect(() => {
+    void checkSupabaseStatus();
+  }, []);
+
+  async function checkSupabaseStatus() {
+    try {
+      const response = await fetch(`${API_BASE}/api/supabase/status`);
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText}`);
+      }
+      setSupabaseStatus(await response.json() as SupabaseStatus);
+    } catch (error) {
+      setSupabaseStatus({
+        configured: false,
+        mode: "api-unavailable",
+        message: `Supabase status unavailable (${(error as Error).message})`
+      });
+    }
+  }
 
   async function postJson<T>(path: string, body: unknown): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
@@ -307,6 +340,10 @@ function App() {
             <span>List health</span>
             <strong>{result.summary.list_health_score}%</strong>
             <p>{result.summary.hot} hot contacts ready for AI outreach at ${result.summary.estimated_ai_cost_usd.toFixed(5)} estimated AI cost.</p>
+            <div className="data-status">
+              <Badge tone={supabaseStatus.configured ? "green" : "amber"}>{supabaseStatus.mode}</Badge>
+              <small>{supabaseStatus.message}</small>
+            </div>
           </div>
         </div>
       </section>
@@ -494,11 +531,13 @@ function App() {
           </div>
         </div>
         <div className="feature-grid">
+          <Feature title="Supabase data API" items={["Credential status endpoint", "Generic table select", "Insert and upsert through PostgREST", "Persist validation runs", "Contacts table persistence"]} />
           <Feature title="Integrations hub" items={["HubSpot bi-directional sync", "Salesforce export", "Lemlist and Instantly campaigns", "Mailchimp nurture", "Slack alerts", "Zapier/Make webhooks", "Google Sheets sync"]} />
           <Feature title="Analytics dashboard" items={["Open/reply/bounce rates", "Pipeline influence", "Signal ROI", "List health trend", "AI tone performance", "PDF and CSV exports"]} />
           <Feature title="Compliance centre" items={["CASL consent", "PIPEDA data rights", "Quebec Law 25 flags", "GDPR notices", "Do-not-contact suppression", "Retention policies", "Audit log"]} />
           <Feature title="Roles and permissions" items={["Solo SMB", "Team Member own-contact view", "Team Admin settings", "Agency Super Admin all-client view"]} />
         </div>
+        <button className="secondary" onClick={checkSupabaseStatus}>Refresh Supabase status</button>
       </section>
 
       <section className="panel pricing">

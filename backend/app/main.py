@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Path as ApiPath
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 from .services import (
     ICPSettings,
@@ -18,6 +18,7 @@ from .services import (
     score_contact,
     validate_email,
 )
+from .supabase import SupabaseApiError, SupabaseClient
 
 
 app = FastAPI(
@@ -93,6 +94,16 @@ class WhiteLabelSettings(BaseModel):
     primary_colour: str = "#2454ff"
     logo_url: str | None = None
     custom_domain: str | None = "tool.agency.example"
+
+
+class SupabaseWriteRequest(BaseModel):
+    records: dict[str, Any] | list[dict[str, Any]]
+    conflict_target: str | None = None
+
+
+class SupabasePersistValidationRequest(ValidateRequest):
+    source_name: str = "manual-upload"
+    owner_id: str | None = None
 
 
 def make_icp(settings: dict[str, Any]) -> ICPSettings:
@@ -193,6 +204,17 @@ def process_contacts(payload: ValidateRequest) -> dict[str, Any]:
     }
 
 
+def supabase_or_503() -> SupabaseClient:
+    client = SupabaseClient()
+    if not client.config.configured:
+        raise HTTPException(status_code=503, detail=client.status())
+    return client
+
+
+def supabase_table_path() -> Any:
+    return ApiPath(..., pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "reachiq-api"}
@@ -201,6 +223,52 @@ def health() -> dict[str, str]:
 @app.get("/api/platform/blueprint")
 def blueprint() -> dict[str, Any]:
     return platform_blueprint()
+
+
+@app.get("/api/supabase/status")
+def supabase_status() -> dict[str, Any]:
+    return SupabaseClient().status()
+
+
+@app.get("/api/supabase/{table}")
+def supabase_select(
+    table: str = supabase_table_path(),
+    limit: int = 50,
+    order: str | None = None,
+) -> dict[str, Any]:
+    try:
+        rows = supabase_or_503().select(table, limit=limit, order=order)
+        return {"table": table, "count": len(rows), "rows": rows}
+    except SupabaseApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/supabase/{table}/insert")
+def supabase_insert(payload: SupabaseWriteRequest, table: str = supabase_table_path()) -> dict[str, Any]:
+    try:
+        rows = supabase_or_503().insert(table, payload.records)
+        return {"table": table, "count": len(rows), "rows": rows}
+    except SupabaseApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/supabase/{table}/upsert")
+def supabase_upsert(payload: SupabaseWriteRequest, table: str = supabase_table_path()) -> dict[str, Any]:
+    try:
+        rows = supabase_or_503().upsert(table, payload.records, payload.conflict_target)
+        return {"table": table, "count": len(rows), "rows": rows}
+    except SupabaseApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/supabase/validation-runs")
+def persist_validation_run(payload: SupabasePersistValidationRequest) -> dict[str, Any]:
+    validation_result = process_contacts(payload)
+    try:
+        persisted = supabase_or_503().persist_validation_run(validation_result, payload.source_name, payload.owner_id)
+        return {"result": validation_result, "persisted": persisted}
+    except SupabaseApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/api/validate/contacts")
