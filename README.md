@@ -108,6 +108,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+HUNTER_API_KEY=your-hunter-api-key
 ```
 
 ## Setup instructions
@@ -150,6 +151,7 @@ npm run build
 | GET/POST | `/api/v1/validate/uploads` | List uploads or run full CSV validation pipeline upload |
 | GET | `/api/v1/validate/contacts` | Fetch processed contact-level validation/enrichment/score detail |
 | GET/POST | `/api/v1/validate/results` | List/create validation results |
+| POST | `/api/validate` | Hunter.io batch email validation (`valid` / `risky` / `invalid`) |
 | GET/POST | `/api/v1/signal` | List/create account signals |
 | GET/POST | `/api/v1/agency/campaigns` | List/create agency campaigns |
 | GET | `/api/v1/usage/metrics` | Tenant usage counters |
@@ -159,6 +161,7 @@ npm run build
 - No mock business data is included.
 - Empty states are expected until real records are created.
 - All data access is tenant-scoped by organization and enforced through RLS.
+- Hunter integration uses in-process request throttling (default 50 req/min, configurable via `HUNTER_RATE_LIMIT_PER_MINUTE`).
 
 ## Supabase deployment
 
