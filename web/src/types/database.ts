@@ -37,6 +37,19 @@ export type Tables = {
     created_at: string;
     updated_at: string;
   };
+  accounts: {
+    id: string;
+    organization_id: string;
+    company_id: string | null;
+    name: string;
+    domain: string;
+    industry: string;
+    monitoring_enabled: boolean;
+    signal_score: number;
+    last_signal_at: string | null;
+    created_at: string;
+    updated_at: string;
+  };
   contacts: {
     id: string;
     organization_id: string;
@@ -83,14 +96,31 @@ export type Tables = {
   signals: {
     id: string;
     organization_id: string;
+    account_id: string | null;
     company_id: string | null;
-    signal_type: string;
+    signal_type: "funding" | "job_posting" | "company_news" | "executive_change" | "technology_change";
     strength: number;
+    signal_score: number;
     summary: string;
     source_url: string | null;
     metadata: Json;
     detected_at: string;
     created_at: string;
+    updated_at: string;
+  };
+  signal_history: {
+    id: string;
+    organization_id: string;
+    account_id: string;
+    signal_id: string | null;
+    event_type: "account_started" | "signal_detected" | "score_updated" | "monitoring_paused" | "monitoring_resumed";
+    previous_score: number | null;
+    new_score: number | null;
+    notes: string | null;
+    payload: Json;
+    event_at: string;
+    created_at: string;
+    updated_at: string;
   };
   campaigns: {
     id: string;

@@ -125,6 +125,22 @@ create table if not exists public.companies (
   unique (organization_id, domain)
 );
 
+create table if not exists public.accounts (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  company_id uuid null references public.companies(id) on delete set null,
+  name text not null,
+  domain citext not null,
+  industry text not null,
+  monitoring_enabled boolean not null default true,
+  signal_score integer not null default 0 check (signal_score between 0 and 100),
+  last_signal_at timestamptz null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (organization_id, domain)
+);
+
 create table if not exists public.contacts (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -180,14 +196,37 @@ create table if not exists public.enrichment_results (
 create table if not exists public.signals (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
+  account_id uuid null references public.accounts(id) on delete set null,
   company_id uuid null references public.companies(id) on delete set null,
-  signal_type text not null,
+  signal_type text not null check (signal_type in ('funding', 'job_posting', 'company_news', 'executive_change', 'technology_change')),
   strength integer not null check (strength >= 1 and strength <= 5),
+  signal_score integer not null default 0 check (signal_score between 0 and 100),
   summary text not null,
   source_url text null,
   metadata jsonb not null default '{}'::jsonb,
   detected_at timestamptz not null default now(),
   created_at timestamptz not null default now()
+);
+
+alter table public.signals
+add column if not exists account_id uuid null references public.accounts(id) on delete set null;
+
+alter table public.signals
+add column if not exists signal_score integer not null default 0 check (signal_score between 0 and 100);
+
+create table if not exists public.signal_history (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  account_id uuid not null references public.accounts(id) on delete cascade,
+  signal_id uuid null references public.signals(id) on delete set null,
+  event_type text not null check (event_type in ('account_started', 'signal_detected', 'score_updated', 'monitoring_paused', 'monitoring_resumed')),
+  previous_score integer null check (previous_score between 0 and 100),
+  new_score integer null check (new_score between 0 and 100),
+  notes text null,
+  payload jsonb not null default '{}'::jsonb,
+  event_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.campaigns (
@@ -243,8 +282,11 @@ create table if not exists public.audit_logs (
 );
 
 create index if not exists contacts_org_company_idx on public.contacts (organization_id, company_id);
+create index if not exists accounts_org_score_idx on public.accounts (organization_id, signal_score desc);
 create index if not exists uploads_org_created_idx on public.uploads (organization_id, created_at desc);
 create index if not exists signals_org_detected_idx on public.signals (organization_id, detected_at desc);
+create index if not exists signals_account_detected_idx on public.signals (account_id, detected_at desc);
+create index if not exists signal_history_org_event_idx on public.signal_history (organization_id, event_at desc);
 create index if not exists campaigns_org_created_idx on public.campaigns (organization_id, created_at desc);
 create index if not exists ai_emails_org_created_idx on public.ai_emails (organization_id, created_at desc);
 create index if not exists audit_logs_org_created_idx on public.audit_logs (organization_id, created_at desc);
@@ -264,6 +306,11 @@ create trigger companies_set_updated_at
 before update on public.companies
 for each row execute function app.set_updated_at();
 
+drop trigger if exists accounts_set_updated_at on public.accounts;
+create trigger accounts_set_updated_at
+before update on public.accounts
+for each row execute function app.set_updated_at();
+
 drop trigger if exists contacts_set_updated_at on public.contacts;
 create trigger contacts_set_updated_at
 before update on public.contacts
@@ -272,6 +319,11 @@ for each row execute function app.set_updated_at();
 drop trigger if exists campaigns_set_updated_at on public.campaigns;
 create trigger campaigns_set_updated_at
 before update on public.campaigns
+for each row execute function app.set_updated_at();
+
+drop trigger if exists signal_history_set_updated_at on public.signal_history;
+create trigger signal_history_set_updated_at
+before update on public.signal_history
 for each row execute function app.set_updated_at();
 
 drop trigger if exists ai_emails_set_updated_at on public.ai_emails;
@@ -379,11 +431,13 @@ alter table public.users enable row level security;
 alter table public.organizations enable row level security;
 alter table public.organization_members enable row level security;
 alter table public.companies enable row level security;
+alter table public.accounts enable row level security;
 alter table public.contacts enable row level security;
 alter table public.uploads enable row level security;
 alter table public.validation_results enable row level security;
 alter table public.enrichment_results enable row level security;
 alter table public.signals enable row level security;
+alter table public.signal_history enable row level security;
 alter table public.campaigns enable row level security;
 alter table public.ai_emails enable row level security;
 alter table public.subscriptions enable row level security;
@@ -443,6 +497,22 @@ for update using (app.can_manage_org_data(organization_id)) with check (app.can_
 
 drop policy if exists companies_delete_admin on public.companies;
 create policy companies_delete_admin on public.companies
+for delete using (app.can_admin_org(organization_id));
+
+drop policy if exists accounts_select_member on public.accounts;
+create policy accounts_select_member on public.accounts
+for select using (app.is_org_member(organization_id));
+
+drop policy if exists accounts_insert_member on public.accounts;
+create policy accounts_insert_member on public.accounts
+for insert with check (app.can_manage_org_data(organization_id));
+
+drop policy if exists accounts_update_member on public.accounts;
+create policy accounts_update_member on public.accounts
+for update using (app.can_manage_org_data(organization_id)) with check (app.can_manage_org_data(organization_id));
+
+drop policy if exists accounts_delete_admin on public.accounts;
+create policy accounts_delete_admin on public.accounts
 for delete using (app.can_admin_org(organization_id));
 
 drop policy if exists contacts_select_member on public.contacts;
@@ -526,6 +596,22 @@ for update using (app.can_manage_org_data(organization_id)) with check (app.can_
 
 drop policy if exists signals_delete_admin on public.signals;
 create policy signals_delete_admin on public.signals
+for delete using (app.can_admin_org(organization_id));
+
+drop policy if exists signal_history_select_member on public.signal_history;
+create policy signal_history_select_member on public.signal_history
+for select using (app.is_org_member(organization_id));
+
+drop policy if exists signal_history_insert_member on public.signal_history;
+create policy signal_history_insert_member on public.signal_history
+for insert with check (app.can_manage_org_data(organization_id));
+
+drop policy if exists signal_history_update_member on public.signal_history;
+create policy signal_history_update_member on public.signal_history
+for update using (app.can_manage_org_data(organization_id)) with check (app.can_manage_org_data(organization_id));
+
+drop policy if exists signal_history_delete_admin on public.signal_history;
+create policy signal_history_delete_admin on public.signal_history
 for delete using (app.can_admin_org(organization_id));
 
 drop policy if exists campaigns_select_member on public.campaigns;

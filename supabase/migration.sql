@@ -100,6 +100,23 @@ create table if not exists public.companies (
   unique (organization_id, domain)
 );
 
+create table if not exists public.accounts (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete restrict,
+  company_id uuid null references public.companies(id) on delete set null,
+  name text not null,
+  domain citext not null,
+  industry text not null,
+  monitoring_enabled boolean not null default true,
+  signal_score integer not null default 0 check (signal_score between 0 and 100),
+  last_signal_at timestamptz null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz null,
+  unique (organization_id, domain)
+);
+
 create table if not exists public.contacts (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete restrict,
@@ -134,13 +151,37 @@ create table if not exists public.campaigns (
 create table if not exists public.signals (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete restrict,
+  account_id uuid null references public.accounts(id) on delete set null,
   company_id uuid null references public.companies(id) on delete set null,
-  signal_type text not null,
+  signal_type text not null check (signal_type in ('funding', 'job_posting', 'company_news', 'executive_change', 'technology_change')),
   strength integer not null check (strength between 1 and 5),
+  signal_score integer not null default 0 check (signal_score between 0 and 100),
   summary text not null,
   source_url text null,
   metadata jsonb not null default '{}'::jsonb,
   detected_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz null
+);
+
+alter table public.signals
+add column if not exists account_id uuid null references public.accounts(id) on delete set null;
+
+alter table public.signals
+add column if not exists signal_score integer not null default 0 check (signal_score between 0 and 100);
+
+create table if not exists public.signal_history (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete restrict,
+  account_id uuid not null references public.accounts(id) on delete cascade,
+  signal_id uuid null references public.signals(id) on delete set null,
+  event_type text not null check (event_type in ('account_started', 'signal_detected', 'score_updated', 'monitoring_paused', 'monitoring_resumed')),
+  previous_score integer null check (previous_score between 0 and 100),
+  new_score integer null check (new_score between 0 and 100),
+  notes text null,
+  payload jsonb not null default '{}'::jsonb,
+  event_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz null
@@ -209,9 +250,13 @@ create table if not exists public.ai_emails (
 
 create index if not exists idx_users_org on public.users (organization_id) where deleted_at is null;
 create index if not exists idx_companies_org on public.companies (organization_id) where deleted_at is null;
+create index if not exists idx_accounts_org on public.accounts (organization_id) where deleted_at is null;
+create index if not exists idx_accounts_org_score on public.accounts (organization_id, signal_score desc) where deleted_at is null;
 create index if not exists idx_contacts_org on public.contacts (organization_id) where deleted_at is null;
 create index if not exists idx_campaigns_org on public.campaigns (organization_id) where deleted_at is null;
 create index if not exists idx_signals_org on public.signals (organization_id) where deleted_at is null;
+create index if not exists idx_signals_account on public.signals (account_id, detected_at desc) where deleted_at is null;
+create index if not exists idx_signal_history_org on public.signal_history (organization_id, event_at desc) where deleted_at is null;
 create index if not exists idx_uploads_org on public.uploads (organization_id) where deleted_at is null;
 create index if not exists idx_validation_results_org on public.validation_results (organization_id) where deleted_at is null;
 create index if not exists idx_enrichment_results_org on public.enrichment_results (organization_id) where deleted_at is null;
@@ -232,6 +277,11 @@ create trigger companies_set_updated_at
 before update on public.companies
 for each row execute function app.set_updated_at();
 
+drop trigger if exists accounts_set_updated_at on public.accounts;
+create trigger accounts_set_updated_at
+before update on public.accounts
+for each row execute function app.set_updated_at();
+
 drop trigger if exists contacts_set_updated_at on public.contacts;
 create trigger contacts_set_updated_at
 before update on public.contacts
@@ -245,6 +295,11 @@ for each row execute function app.set_updated_at();
 drop trigger if exists signals_set_updated_at on public.signals;
 create trigger signals_set_updated_at
 before update on public.signals
+for each row execute function app.set_updated_at();
+
+drop trigger if exists signal_history_set_updated_at on public.signal_history;
+create trigger signal_history_set_updated_at
+before update on public.signal_history
 for each row execute function app.set_updated_at();
 
 drop trigger if exists uploads_set_updated_at on public.uploads;
@@ -330,9 +385,11 @@ $$;
 alter table public.organizations enable row level security;
 alter table public.users enable row level security;
 alter table public.companies enable row level security;
+alter table public.accounts enable row level security;
 alter table public.contacts enable row level security;
 alter table public.campaigns enable row level security;
 alter table public.signals enable row level security;
+alter table public.signal_history enable row level security;
 alter table public.uploads enable row level security;
 alter table public.validation_results enable row level security;
 alter table public.enrichment_results enable row level security;
@@ -387,6 +444,17 @@ create policy companies_update_own_org on public.companies
 for update using (organization_id = app.current_organization_id())
 with check (organization_id = app.current_organization_id());
 
+drop policy if exists accounts_select_own_org on public.accounts;
+create policy accounts_select_own_org on public.accounts
+for select using (organization_id = app.current_organization_id() and deleted_at is null);
+drop policy if exists accounts_insert_own_org on public.accounts;
+create policy accounts_insert_own_org on public.accounts
+for insert with check (organization_id = app.current_organization_id());
+drop policy if exists accounts_update_own_org on public.accounts;
+create policy accounts_update_own_org on public.accounts
+for update using (organization_id = app.current_organization_id())
+with check (organization_id = app.current_organization_id());
+
 drop policy if exists contacts_select_own_org on public.contacts;
 create policy contacts_select_own_org on public.contacts
 for select using (organization_id = app.current_organization_id() and deleted_at is null);
@@ -420,6 +488,17 @@ create policy signals_insert_own_org on public.signals
 for insert with check (organization_id = app.current_organization_id());
 drop policy if exists signals_update_own_org on public.signals;
 create policy signals_update_own_org on public.signals
+for update using (organization_id = app.current_organization_id())
+with check (organization_id = app.current_organization_id());
+
+drop policy if exists signal_history_select_own_org on public.signal_history;
+create policy signal_history_select_own_org on public.signal_history
+for select using (organization_id = app.current_organization_id() and deleted_at is null);
+drop policy if exists signal_history_insert_own_org on public.signal_history;
+create policy signal_history_insert_own_org on public.signal_history
+for insert with check (organization_id = app.current_organization_id());
+drop policy if exists signal_history_update_own_org on public.signal_history;
+create policy signal_history_update_own_org on public.signal_history
 for update using (organization_id = app.current_organization_id())
 with check (organization_id = app.current_organization_id());
 

@@ -27,7 +27,7 @@ Production-ready multi-tenant SaaS foundation for ReachIQ with:
 ### 3) Core modules
 
 - **ReachIQ Validate:** upload registration and validation-result APIs/pages
-- **ReachIQ Signal:** signal capture and timeline APIs/pages
+- **ReachIQ Signal:** target account monitoring with signal feed, signal scoring, and timeline APIs/pages
 - **ReachIQ Agency:** campaign creation and subscription overview APIs/pages
 
 ### 4) Database schema + RLS
@@ -155,7 +155,9 @@ npm run build
 | GET/POST | `/api/v1/validate/results` | List/create validation results |
 | POST | `/api/validate` | Hunter.io batch email validation (`valid` / `risky` / `invalid`) |
 | POST | `/api/enrich` | Apollo batch contact enrichment and persistence into `enrichment_results` |
-| GET/POST | `/api/v1/signal` | List/create account signals |
+| GET/POST | `/api/v1/signal` | List/create account signals feed items |
+| GET/POST | `/api/v1/signal/accounts` | List/create monitored target accounts |
+| GET | `/api/v1/signal/timeline` | List signal history timeline for monitored accounts |
 | GET/POST | `/api/v1/agency/campaigns` | List/create agency campaigns |
 | POST | `/api/generate-email` | Generate Claude Haiku personalized outreach email and store in `ai_emails` |
 | GET | `/api/v1/usage/metrics` | Tenant usage counters |
@@ -167,6 +169,7 @@ npm run build
 - All data access is tenant-scoped by organization and enforced through RLS.
 - Hunter integration uses in-process request throttling (default 50 req/min, configurable via `HUNTER_RATE_LIMIT_PER_MINUTE`).
 - Apollo integration retries failed provider calls (default 3 attempts, configurable via `APOLLO_MAX_RETRIES`).
+- Signal module architecture doc: `docs/reachiq-signal-architecture.md`.
 
 ## Supabase deployment
 
