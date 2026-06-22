@@ -1,11 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-import { refreshAuthSession } from "@/lib/supabase/middleware-client";
+import { updateSession } from "@/lib/supabase/middleware";
 
 const PUBLIC_AUTH_PATHS = ["/login", "/sign-up", "/reset-password"];
 
 export async function middleware(request: NextRequest) {
-  const { response, isAuthenticated } = await refreshAuthSession(request);
+  const { response, isAuthenticated } = await updateSession(request);
   const pathname = request.nextUrl.pathname;
   const isPublicAuthRoute = PUBLIC_AUTH_PATHS.some((path) => pathname.startsWith(path));
 
