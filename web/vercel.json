@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/v1/ops/retry-queue/process?limit=25",
+      "schedule": "*/10 * * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/v1/ops/retry-queue/process/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

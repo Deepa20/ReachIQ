@@ -122,6 +122,20 @@ export type Tables = {
     created_at: string;
     updated_at: string;
   };
+  retry_jobs: {
+    id: string;
+    organization_id: string;
+    job_type: "hunter_validate_contact" | "apollo_enrich_contact" | "claude_generate_email";
+    payload: Json;
+    status: "pending" | "processing" | "completed" | "failed";
+    attempt_count: number;
+    max_attempts: number;
+    next_attempt_at: string;
+    last_error: string | null;
+    last_result: Json | null;
+    created_at: string;
+    updated_at: string;
+  };
   campaigns: {
     id: string;
     organization_id: string;

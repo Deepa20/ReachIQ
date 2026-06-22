@@ -187,6 +187,22 @@ create table if not exists public.signal_history (
   deleted_at timestamptz null
 );
 
+create table if not exists public.retry_jobs (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  job_type text not null check (job_type in ('hunter_validate_contact', 'apollo_enrich_contact', 'claude_generate_email')),
+  payload jsonb not null default '{}'::jsonb,
+  status text not null check (status in ('pending', 'processing', 'completed', 'failed')) default 'pending',
+  attempt_count integer not null default 0 check (attempt_count >= 0),
+  max_attempts integer not null default 5 check (max_attempts > 0),
+  next_attempt_at timestamptz not null default now(),
+  last_error text null,
+  last_result jsonb null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz null
+);
+
 create table if not exists public.uploads (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete restrict,
@@ -257,6 +273,7 @@ create index if not exists idx_campaigns_org on public.campaigns (organization_i
 create index if not exists idx_signals_org on public.signals (organization_id) where deleted_at is null;
 create index if not exists idx_signals_account on public.signals (account_id, detected_at desc) where deleted_at is null;
 create index if not exists idx_signal_history_org on public.signal_history (organization_id, event_at desc) where deleted_at is null;
+create index if not exists idx_retry_jobs_org on public.retry_jobs (organization_id, status, next_attempt_at) where deleted_at is null;
 create index if not exists idx_uploads_org on public.uploads (organization_id) where deleted_at is null;
 create index if not exists idx_validation_results_org on public.validation_results (organization_id) where deleted_at is null;
 create index if not exists idx_enrichment_results_org on public.enrichment_results (organization_id) where deleted_at is null;
@@ -300,6 +317,11 @@ for each row execute function app.set_updated_at();
 drop trigger if exists signal_history_set_updated_at on public.signal_history;
 create trigger signal_history_set_updated_at
 before update on public.signal_history
+for each row execute function app.set_updated_at();
+
+drop trigger if exists retry_jobs_set_updated_at on public.retry_jobs;
+create trigger retry_jobs_set_updated_at
+before update on public.retry_jobs
 for each row execute function app.set_updated_at();
 
 drop trigger if exists uploads_set_updated_at on public.uploads;
@@ -390,6 +412,7 @@ alter table public.contacts enable row level security;
 alter table public.campaigns enable row level security;
 alter table public.signals enable row level security;
 alter table public.signal_history enable row level security;
+alter table public.retry_jobs enable row level security;
 alter table public.uploads enable row level security;
 alter table public.validation_results enable row level security;
 alter table public.enrichment_results enable row level security;
@@ -499,6 +522,17 @@ create policy signal_history_insert_own_org on public.signal_history
 for insert with check (organization_id = app.current_organization_id());
 drop policy if exists signal_history_update_own_org on public.signal_history;
 create policy signal_history_update_own_org on public.signal_history
+for update using (organization_id = app.current_organization_id())
+with check (organization_id = app.current_organization_id());
+
+drop policy if exists retry_jobs_select_own_org on public.retry_jobs;
+create policy retry_jobs_select_own_org on public.retry_jobs
+for select using (organization_id = app.current_organization_id() and deleted_at is null);
+drop policy if exists retry_jobs_insert_own_org on public.retry_jobs;
+create policy retry_jobs_insert_own_org on public.retry_jobs
+for insert with check (organization_id = app.current_organization_id());
+drop policy if exists retry_jobs_update_own_org on public.retry_jobs;
+create policy retry_jobs_update_own_org on public.retry_jobs
 for update using (organization_id = app.current_organization_id())
 with check (organization_id = app.current_organization_id());
 

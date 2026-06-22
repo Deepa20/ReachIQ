@@ -3,6 +3,9 @@ import { z } from "zod";
 
 import { ApiError, apiErrorResponse, requireApiAuth, requireOrganizationMembership } from "@/lib/api/auth-context";
 import { generateClaudeHaikuEmail, type OutreachTone } from "@/lib/integrations/claude-haiku";
+import { captureException, recordMetric } from "@/lib/observability/monitoring";
+import { logger } from "@/lib/observability/logger";
+import { enqueueRetryJob } from "@/lib/queue/retry-queue";
 
 const toneSchema = z.enum(["Warm", "Direct", "Consultative", "Peer to Peer"]);
 
@@ -77,15 +80,54 @@ export async function POST(request: Request) {
     const context = await resolveMembershipContext(body.organizationId);
     assertCanGenerate(context.role);
 
-    const generated = await generateClaudeHaikuEmail({
-      name: body.name,
-      title: body.title,
-      company: body.company,
-      industry: body.industry,
-      signal: body.signal,
-      productDescription: body.product_description,
-      tone: body.tone,
-    });
+    let generated: Awaited<ReturnType<typeof generateClaudeHaikuEmail>>;
+    try {
+      generated = await generateClaudeHaikuEmail({
+        name: body.name,
+        title: body.title,
+        company: body.company,
+        industry: body.industry,
+        signal: body.signal,
+        productDescription: body.product_description,
+        tone: body.tone,
+      });
+    } catch (providerError) {
+      captureException("Claude generation failed", providerError, {
+        route: "/api/generate-email",
+        organizationId: context.organizationId,
+      });
+
+      const retryJob = await enqueueRetryJob({
+        organizationId: context.organizationId,
+        jobType: "claude_generate_email",
+        payload: {
+          organizationId: context.organizationId,
+          campaignId: body.campaignId,
+          contactId: body.contactId,
+          name: body.name,
+          title: body.title,
+          company: body.company,
+          industry: body.industry,
+          signal: body.signal,
+          product_description: body.product_description,
+          tone: body.tone,
+        },
+      });
+
+      recordMetric("retry_job_enqueued", 1, {
+        route: "/api/generate-email",
+        jobType: "claude_generate_email",
+      });
+
+      return NextResponse.json(
+        {
+          message: "Email generation provider unavailable; queued for retry",
+          queued: true,
+          retryJob,
+        },
+        { status: 202 },
+      );
+    }
 
     const { data, error } = await context.supabase
       .from("ai_emails")
@@ -107,6 +149,17 @@ export async function POST(request: Request) {
       throw new ApiError(500, error.message);
     }
 
+    logger.info("Email generated", {
+      route: "/api/generate-email",
+      organizationId: context.organizationId,
+      aiEmailId: data.id,
+      model: data.model_name,
+    });
+    recordMetric("email_generated_total", 1, {
+      route: "/api/generate-email",
+      tone: data.tone ?? "unknown",
+    });
+
     return NextResponse.json({
       message: "Email generated",
       output: {
@@ -116,6 +169,6 @@ export async function POST(request: Request) {
       item: data,
     });
   } catch (error) {
-    return apiErrorResponse(error);
+    return apiErrorResponse(error, { route: "/api/generate-email" });
   }
 }

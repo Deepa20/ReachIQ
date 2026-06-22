@@ -1,5 +1,6 @@
-# Supabase CLI config for ReachIQ
+# Supabase CLI config for ReachIQ (local development)
 # Docs: https://supabase.com/docs/guides/cli/local-development
+# For production deployment template, see: ./config.production.toml
 
 project_id = "reachiq"
 

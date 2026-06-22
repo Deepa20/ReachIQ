@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { apiErrorResponse, requireOrganizationMembership } from "@/lib/api/auth-context";
 import { enrichContact, type ApolloEnrichmentResult } from "@/lib/integrations/apollo";
+import { captureException, recordMetric } from "@/lib/observability/monitoring";
+import { enqueueRetryJob } from "@/lib/queue/retry-queue";
 
 const enrichBatchSchema = z.object({
   organizationId: z.string().uuid(),
@@ -290,6 +292,35 @@ export async function POST(request: Request) {
           },
         });
       } catch (error) {
+        captureException("Enrichment entry failed", error, {
+          route: "/api/enrich",
+          organizationId: body.organizationId,
+          contactId: entry.contactId ?? null,
+          email: entry.email ?? null,
+        });
+        try {
+          await enqueueRetryJob({
+            organizationId: body.organizationId,
+            jobType: "apollo_enrich_contact",
+            payload: {
+              email: entry.email,
+              firstName: entry.firstName,
+              lastName: entry.lastName,
+              companyName: entry.companyName,
+              companyDomain: entry.companyDomain,
+              linkedinUrl: entry.linkedinUrl,
+            },
+          });
+          recordMetric("retry_job_enqueued", 1, {
+            route: "/api/enrich",
+            jobType: "apollo_enrich_contact",
+          });
+        } catch (enqueueError) {
+          captureException("Failed to enqueue enrichment retry job", enqueueError, {
+            route: "/api/enrich",
+            organizationId: body.organizationId,
+          });
+        }
         results.push({
           contactId: entry.contactId ?? null,
           email: entry.email ?? null,
@@ -299,11 +330,16 @@ export async function POST(request: Request) {
       }
     }
 
+    recordMetric("enrichment_batch_processed", 1, {
+      route: "/api/enrich",
+      total: results.length,
+      failed: results.filter((item) => item.status === "failed").length,
+    });
     return NextResponse.json({
       summary: summarize(results),
       results,
     });
   } catch (error) {
-    return apiErrorResponse(error);
+    return apiErrorResponse(error, { route: "/api/enrich" });
   }
 }

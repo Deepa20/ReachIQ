@@ -5,16 +5,22 @@ import { updateSession } from "@/lib/supabase/middleware";
 const PUBLIC_AUTH_PATHS = ["/login", "/sign-up", "/reset-password"];
 
 export async function middleware(request: NextRequest) {
+  const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
   const { response, isAuthenticated } = await updateSession(request);
   const pathname = request.nextUrl.pathname;
   const isPublicAuthRoute = PUBLIC_AUTH_PATHS.some((path) => pathname.startsWith(path));
+  response.headers.set("x-request-id", requestId);
 
   if (!isAuthenticated && pathname.startsWith("/dashboard")) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const redirect = NextResponse.redirect(new URL("/login", request.url));
+    redirect.headers.set("x-request-id", requestId);
+    return redirect;
   }
 
   if (isAuthenticated && isPublicAuthRoute) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    const redirect = NextResponse.redirect(new URL("/dashboard", request.url));
+    redirect.headers.set("x-request-id", requestId);
+    return redirect;
   }
 
   return response;

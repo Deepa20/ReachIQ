@@ -111,6 +111,12 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 HUNTER_API_KEY=your-hunter-api-key
 APOLLO_API_KEY=your-apollo-api-key
 ANTHROPIC_API_KEY=your-anthropic-api-key
+# Optional production settings
+# LOG_LEVEL=info
+# MONITORING_WEBHOOK_URL=https://monitoring.example.com/events
+# RETRY_QUEUE_MAX_ATTEMPTS=5
+# RETRY_QUEUE_BASE_DELAY_SECONDS=30
+# RETRY_QUEUE_PROCESS_TOKEN=your-strong-random-token
 ```
 
 ## Setup instructions
@@ -158,6 +164,7 @@ npm run build
 | GET/POST | `/api/v1/signal` | List/create account signals feed items |
 | GET/POST | `/api/v1/signal/accounts` | List/create monitored target accounts |
 | GET | `/api/v1/signal/timeline` | List signal history timeline for monitored accounts |
+| GET/POST | `/api/v1/ops/retry-queue/process` | Process queued retry jobs (cron/ops) |
 | GET/POST | `/api/v1/agency/campaigns` | List/create agency campaigns |
 | POST | `/api/generate-email` | Generate Claude Haiku personalized outreach email and store in `ai_emails` |
 | GET | `/api/v1/usage/metrics` | Tenant usage counters |
@@ -170,6 +177,27 @@ npm run build
 - Hunter integration uses in-process request throttling (default 50 req/min, configurable via `HUNTER_RATE_LIMIT_PER_MINUTE`).
 - Apollo integration retries failed provider calls (default 3 attempts, configurable via `APOLLO_MAX_RETRIES`).
 - Signal module architecture doc: `docs/reachiq-signal-architecture.md`.
+- Production deployment checklist: `docs/deployment-checklist.md`.
+
+## Production deployment assets
+
+- Docker image: `Dockerfile` (+ `.dockerignore`)
+- CI workflow: `.github/workflows/ci.yml`
+- Deploy workflow: `.github/workflows/deploy.yml`
+- Vercel config: `web/vercel.json`
+- Supabase deployment config template: `supabase/config.production.toml`
+
+## Runtime hardening included
+
+- Structured JSON logging (`web/src/lib/observability/logger.ts`)
+- API error tracking + metric hooks (`web/src/lib/observability/monitoring.ts`)
+- Improved API error payloads with `errorId` (`web/src/lib/api/auth-context.ts`)
+- Health endpoint includes retry queue health (`/api/health`)
+- Retry queue subsystem:
+  - DB table: `retry_jobs`
+  - Queue helper: `web/src/lib/queue/retry-queue.ts`
+  - Queue processor endpoint: `/api/v1/ops/retry-queue/process`
+  - Provider failure queueing in `/api/validate`, `/api/enrich`, `/api/generate-email`
 
 ## Supabase deployment
 

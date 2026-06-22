@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { ApiError, apiErrorResponse, requireOrganizationMembership } from "@/lib/api/auth-context";
 import { checkCatchAll, validateEmail, verifyDomain, type HunterDomainVerification, type HunterValidationResult } from "@/lib/integrations/hunter";
+import { captureException, recordMetric } from "@/lib/observability/monitoring";
+import { enqueueRetryJob } from "@/lib/queue/retry-queue";
 import { classifyReachIqScore, type LeadClassification } from "@/services/scoring";
 
 const validateBatchSchema = z.object({
@@ -120,47 +122,85 @@ export async function POST(request: Request) {
       const domain = email.split("@")[1] || "";
       const contactId = entry.contactId ?? existingContactsByEmail.get(email) ?? null;
 
-      const validation = validationCache.has(email) ? validationCache.get(email)! : await validateEmail(email);
-      validationCache.set(email, validation);
+      try {
+        const validation = validationCache.has(email) ? validationCache.get(email)! : await validateEmail(email);
+        validationCache.set(email, validation);
 
-      const domainVerification = domainCache.has(domain) ? domainCache.get(domain)! : await verifyDomain(domain);
-      domainCache.set(domain, domainVerification);
+        const domainVerification = domainCache.has(domain) ? domainCache.get(domain)! : await verifyDomain(domain);
+        domainCache.set(domain, domainVerification);
 
-      const catchAll = await checkCatchAll(email, validation.raw);
-      const finalStatus = toFinalStatus(validation, domainVerification, catchAll);
-      const reasons = [...validation.reasons];
-      if (!domainVerification.exists) reasons.push("Domain could not be verified");
-      if (domainVerification.disposable) reasons.push("Domain flagged disposable");
-      if (domainVerification.webmail) reasons.push("Domain flagged webmail");
-      if (catchAll) reasons.push("Hunter catch-all detected");
+        const catchAll = await checkCatchAll(email, validation.raw);
+        const finalStatus = toFinalStatus(validation, domainVerification, catchAll);
+        const reasons = [...validation.reasons];
+        if (!domainVerification.exists) reasons.push("Domain could not be verified");
+        if (domainVerification.disposable) reasons.push("Domain flagged disposable");
+        if (domainVerification.webmail) reasons.push("Domain flagged webmail");
+        if (catchAll) reasons.push("Hunter catch-all detected");
 
-      const score = toFinalScore(finalStatus, validation.score);
-      const classification = classifyReachIqScore(score);
+        const score = toFinalScore(finalStatus, validation.score);
+        const classification = classifyReachIqScore(score);
 
-      const { error: insertError } = await supabase.from("validation_results").insert({
-        organization_id: body.organizationId,
-        upload_id: uploadId,
-        contact_id: contactId,
-        validation_status: finalStatus,
-        score,
-        classification,
-        reasons,
-        validated_at: new Date().toISOString(),
-        deleted_at: null,
-      });
+        const { error: insertError } = await supabase.from("validation_results").insert({
+          organization_id: body.organizationId,
+          upload_id: uploadId,
+          contact_id: contactId,
+          validation_status: finalStatus,
+          score,
+          classification,
+          reasons,
+          validated_at: new Date().toISOString(),
+          deleted_at: null,
+        });
 
-      if (insertError) {
-        throw new ApiError(500, insertError.message);
+        if (insertError) {
+          throw new ApiError(500, insertError.message);
+        }
+
+        results.push({
+          email,
+          contactId,
+          status: finalStatus,
+          score,
+          classification,
+          reasons,
+        });
+      } catch (validationError) {
+        captureException("Validation provider call failed", validationError, {
+          route: "/api/validate",
+          organizationId: body.organizationId,
+          email,
+        });
+        try {
+          await enqueueRetryJob({
+            organizationId: body.organizationId,
+            jobType: "hunter_validate_contact",
+            payload: {
+              email,
+            },
+          });
+          recordMetric("retry_job_enqueued", 1, {
+            route: "/api/validate",
+            jobType: "hunter_validate_contact",
+          });
+        } catch (enqueueError) {
+          captureException("Failed to enqueue hunter validation retry", enqueueError, {
+            route: "/api/validate",
+            organizationId: body.organizationId,
+            email,
+          });
+        }
+        results.push({
+          email,
+          contactId,
+          status: "invalid",
+          score: 0,
+          classification: "COLD",
+          reasons: [
+            "Validation provider unavailable",
+            validationError instanceof Error ? validationError.message : "Unknown validation error",
+          ],
+        });
       }
-
-      results.push({
-        email,
-        contactId,
-        status: finalStatus,
-        score,
-        classification,
-        reasons,
-      });
     }
 
     await supabase
@@ -178,6 +218,6 @@ export async function POST(request: Request) {
       results,
     });
   } catch (error) {
-    return apiErrorResponse(error);
+    return apiErrorResponse(error, { route: "/api/validate" });
   }
 }
