@@ -37,6 +37,14 @@ $$;
 
 do $$
 begin
+  if not exists (select 1 from pg_type where typname = 'lead_classification') then
+    create type app.lead_classification as enum ('HOT', 'WARM', 'COLD');
+  end if;
+end
+$$;
+
+do $$
+begin
   if not exists (select 1 from pg_type where typname = 'campaign_module') then
     create type app.campaign_module as enum ('validate', 'signal', 'agency');
   end if;
@@ -151,9 +159,13 @@ create table if not exists public.validation_results (
   contact_id uuid null references public.contacts(id) on delete set null,
   validation_status app.validation_status not null,
   score integer not null default 0 check (score >= 0 and score <= 100),
+  classification app.lead_classification not null default 'COLD',
   reasons jsonb not null default '[]'::jsonb,
   validated_at timestamptz not null default now()
 );
+
+alter table public.validation_results
+add column if not exists classification app.lead_classification not null default 'COLD';
 
 create table if not exists public.enrichment_results (
   id uuid primary key default gen_random_uuid(),

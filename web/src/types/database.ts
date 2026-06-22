@@ -68,6 +68,7 @@ export type Tables = {
     contact_id: string | null;
     validation_status: "valid" | "risky" | "invalid";
     score: number;
+    classification: "HOT" | "WARM" | "COLD";
     reasons: Json;
     validated_at: string;
   };

@@ -1,7 +1,7 @@
 import { parse } from "csv-parse/sync";
+import { scoreReachIqSignals, type LeadClassification, type ReachIqScoringSignals } from "@/services/scoring";
 
 export type ValidationStatus = "valid" | "risky" | "invalid";
-export type LeadTemperature = "HOT" | "WARM" | "COLD";
 
 export type ParsedCsvContact = {
   firstName: string | null;
@@ -27,7 +27,8 @@ export type ValidationResult = {
 
 export type ScoredContact = {
   score: number;
-  temperature: LeadTemperature;
+  classification: LeadClassification;
+  signals: ReachIqScoringSignals;
 };
 
 const ROLE_BASED_LOCALS = new Set(["admin", "billing", "careers", "contact", "help", "hello", "hr", "info", "jobs", "marketing", "sales", "support"]);
@@ -38,6 +39,10 @@ const FREE_EMAIL_DOMAINS = new Set(["gmail.com", "outlook.com", "hotmail.com", "
 
 const EMAIL_PATTERN = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 const DECISION_MAKER_PATTERN = /\b(founder|owner|chief|ceo|cmo|coo|cto|cfo|vp|vice president|head|director|partner|principal)\b/i;
+const JOB_CHANGE_PATTERN = /\b(new|recent|joined|promoted|appointed)\b/i;
+const JOB_POSTING_PATTERN = /\b(hiring|recruiting|talent|careers?)\b/i;
+const COMPANY_NEWS_PATTERN = /\b(news|press|launch|announced|award)\b/i;
+const TECH_STACK_PATTERN = /\b(ai|saas|cloud|data|devops|security|api)\b/i;
 
 function normaliseHeader(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -174,26 +179,30 @@ export function enrichContact(parsedContact: ParsedCsvContact): ContactEnrichmen
   };
 }
 
-export function scoreContact(parsedContact: ParsedCsvContact, validation: ValidationResult, enrichment: ContactEnrichment): ScoredContact {
-  let score = 0;
-
-  if (validation.status === "valid") score += 35;
-  if (validation.status === "risky") score += 15;
-  if (validation.status === "invalid") score += 0;
-
-  if (parsedContact.title) score += 10;
-  if (parsedContact.linkedinUrl) score += 10;
-  if (parsedContact.company || enrichment.companyName) score += 10;
-  if (enrichment.employeeCount >= 20 && enrichment.employeeCount <= 500) score += 10;
-  if (enrichment.confidence >= 80) score += 10;
-  if (parsedContact.title && DECISION_MAKER_PATTERN.test(parsedContact.title)) score += 15;
-  if (enrichment.companyDomain && !FREE_EMAIL_DOMAINS.has(enrichment.companyDomain)) score += 10;
-
-  const finalScore = Math.max(0, Math.min(100, score));
-  const temperature: LeadTemperature = finalScore >= 70 ? "HOT" : finalScore >= 40 ? "WARM" : "COLD";
+function inferScoringSignals(parsedContact: ParsedCsvContact, validation: ValidationResult, enrichment: ContactEnrichment): ReachIqScoringSignals {
+  const title = parsedContact.title ?? "";
+  const companyContext = `${parsedContact.company ?? ""} ${enrichment.companyName} ${enrichment.companyDomain ?? ""} ${enrichment.industry}`;
+  const seed = hashSeed(`${parsedContact.email}|${enrichment.companyName}|${parsedContact.title ?? ""}|${enrichment.industry}`);
 
   return {
-    score: finalScore,
-    temperature,
+    jobChange: JOB_CHANGE_PATTERN.test(title),
+    fundingEvent: seed % 9 === 0,
+    jobPosting: JOB_POSTING_PATTERN.test(companyContext) || seed % 7 === 0,
+    companyNews: COMPANY_NEWS_PATTERN.test(companyContext) || seed % 6 === 0,
+    techStackMatch: TECH_STACK_PATTERN.test(companyContext),
+    companySizeMatch: enrichment.employeeCount >= 20 && enrichment.employeeCount <= 500,
+    validatedEmail: validation.status === "valid",
+    decisionMaker: DECISION_MAKER_PATTERN.test(title),
+  };
+}
+
+export function scoreContact(parsedContact: ParsedCsvContact, validation: ValidationResult, enrichment: ContactEnrichment): ScoredContact {
+  const signals = inferScoringSignals(parsedContact, validation, enrichment);
+  const scoreResult = scoreReachIqSignals(signals);
+
+  return {
+    score: scoreResult.score,
+    classification: scoreResult.classification,
+    signals,
   };
 }

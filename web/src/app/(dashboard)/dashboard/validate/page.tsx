@@ -24,7 +24,7 @@ export default async function ValidatePage() {
       .limit(20),
     supabase
       .from("validation_results")
-      .select("id,validation_status,score,reasons,validated_at,contacts(id,first_name,last_name,email,title,metadata,companies(name,domain),enrichment_results(provider,payload,enriched_at))")
+      .select("id,validation_status,score,classification,reasons,validated_at,contacts(id,first_name,last_name,email,title,metadata,companies(name,domain),enrichment_results(provider,payload,enriched_at))")
       .eq("organization_id", membership.organizationId)
       .is("deleted_at", null)
       .order("validated_at", { ascending: false })
@@ -94,13 +94,13 @@ export default async function ValidatePage() {
                         last_name?: string | null;
                         email?: string | null;
                         title?: string | null;
-                        metadata?: { temperature?: string } | null;
+                        metadata?: { classification?: string } | null;
                         companies?: { name?: string | null } | Array<{ name?: string | null }> | null;
                       } | null;
                       const company = contactRecord?.companies;
                       const companyName = Array.isArray(company) ? company[0]?.name : company?.name;
                       const fullName = [contactRecord?.first_name, contactRecord?.last_name].filter(Boolean).join(" ");
-                      const temperature = contactRecord?.metadata?.temperature ?? "N/A";
+                      const classification = result.classification ?? contactRecord?.metadata?.classification ?? "N/A";
                       return (
                         <tr key={result.id} className="border-t border-slate-200">
                           <td className="px-3 py-2">
@@ -115,7 +115,7 @@ export default async function ValidatePage() {
                           </td>
                           <td className="px-3 py-2">
                             <p className="font-semibold text-slate-900">{result.score}</p>
-                            <p className="text-slate-500">{temperature}</p>
+                            <p className="text-slate-500">{classification}</p>
                           </td>
                         </tr>
                       );

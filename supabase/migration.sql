@@ -46,6 +46,14 @@ begin
 end
 $$;
 
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'lead_classification') then
+    create type app.lead_classification as enum ('HOT', 'WARM', 'COLD');
+  end if;
+end
+$$;
+
 create or replace function app.set_updated_at()
 returns trigger
 language plpgsql
@@ -159,12 +167,16 @@ create table if not exists public.validation_results (
   contact_id uuid null references public.contacts(id) on delete set null,
   validation_status text not null check (validation_status in ('valid', 'risky', 'invalid')),
   score integer not null default 0 check (score between 0 and 100),
+  classification app.lead_classification not null default 'COLD',
   reasons jsonb not null default '[]'::jsonb,
   validated_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz null
 );
+
+alter table public.validation_results
+add column if not exists classification app.lead_classification not null default 'COLD';
 
 create table if not exists public.enrichment_results (
   id uuid primary key default gen_random_uuid(),

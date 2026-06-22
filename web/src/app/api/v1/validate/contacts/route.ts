@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from("validation_results")
       .select(
-        "id,upload_id,contact_id,validation_status,score,reasons,validated_at,contacts(id,first_name,last_name,email,title,linkedin_url,metadata,companies(name,domain),enrichment_results(provider,payload,enriched_at))",
+        "id,upload_id,contact_id,validation_status,score,classification,reasons,validated_at,contacts(id,first_name,last_name,email,title,linkedin_url,metadata,companies(name,domain),enrichment_results(provider,payload,enriched_at))",
       )
       .eq("organization_id", organizationId)
       .is("deleted_at", null)

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { ApiError, apiErrorResponse, requireOrganizationMembership } from "@/lib/api/auth-context";
-import { enrichContact, parseCsvContacts, runEmailValidation, scoreContact, type LeadTemperature, type ValidationStatus } from "@/lib/validate/pipeline";
+import { enrichContact, parseCsvContacts, runEmailValidation, scoreContact, type ValidationStatus } from "@/lib/validate/pipeline";
+import { type LeadClassification } from "@/services/scoring";
 
 const createUploadSchema = z.object({
   organizationId: z.string().uuid(),
@@ -165,7 +166,7 @@ export async function POST(request: Request) {
         title: string | null;
         validationStatus: ValidationStatus;
         score: number;
-        temperature: LeadTemperature;
+        classification: LeadClassification;
         reasons: string[];
       }> = [];
 
@@ -197,7 +198,8 @@ export async function POST(request: Request) {
             validationStatus: validation.status,
             reasons: validation.reasons,
             score: scoring.score,
-            temperature: scoring.temperature,
+            classification: scoring.classification,
+            scoringSignals: scoring.signals,
           },
           deleted_at: null,
         };
@@ -218,6 +220,7 @@ export async function POST(request: Request) {
           contact_id: contact.id,
           validation_status: validation.status,
           score: scoring.score,
+          classification: scoring.classification,
           reasons: validation.reasons,
           validated_at: new Date().toISOString(),
           deleted_at: null,
@@ -235,7 +238,8 @@ export async function POST(request: Request) {
             payload: {
               ...enrichment,
               score: scoring.score,
-              temperature: scoring.temperature,
+              classification: scoring.classification,
+              scoringSignals: scoring.signals,
             },
             enriched_at: new Date().toISOString(),
             deleted_at: null,
@@ -258,7 +262,7 @@ export async function POST(request: Request) {
           title: contact.title,
           validationStatus: validation.status,
           score: scoring.score,
-          temperature: scoring.temperature,
+          classification: scoring.classification,
           reasons: validation.reasons,
         });
       }
@@ -281,9 +285,9 @@ export async function POST(request: Request) {
         valid: processedContacts.filter((contact) => contact.validationStatus === "valid").length,
         risky: processedContacts.filter((contact) => contact.validationStatus === "risky").length,
         invalid: processedContacts.filter((contact) => contact.validationStatus === "invalid").length,
-        hot: processedContacts.filter((contact) => contact.temperature === "HOT").length,
-        warm: processedContacts.filter((contact) => contact.temperature === "WARM").length,
-        cold: processedContacts.filter((contact) => contact.temperature === "COLD").length,
+        hot: processedContacts.filter((contact) => contact.classification === "HOT").length,
+        warm: processedContacts.filter((contact) => contact.classification === "WARM").length,
+        cold: processedContacts.filter((contact) => contact.classification === "COLD").length,
       };
 
       return NextResponse.json({

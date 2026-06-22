@@ -31,7 +31,7 @@ type PipelineResponse = {
     title: string | null;
     validationStatus: "valid" | "risky" | "invalid";
     score: number;
-    temperature: "HOT" | "WARM" | "COLD";
+    classification: "HOT" | "WARM" | "COLD";
     reasons: string[];
   }>;
 };
@@ -143,7 +143,7 @@ export function ValidateModulePanel({ organizationId }: ValidateModulePanelProps
                       </td>
                       <td className="px-3 py-2">
                         <p className="font-semibold text-slate-900">{contact.score}</p>
-                        <p className="text-slate-500">{contact.temperature}</p>
+                        <p className="text-slate-500">{contact.classification}</p>
                       </td>
                     </tr>
                   ))}

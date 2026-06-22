@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { ApiError, apiErrorResponse, requireOrganizationMembership } from "@/lib/api/auth-context";
 import { checkCatchAll, validateEmail, verifyDomain, type HunterDomainVerification, type HunterValidationResult } from "@/lib/integrations/hunter";
+import { classifyReachIqScore, type LeadClassification } from "@/services/scoring";
 
 const validateBatchSchema = z.object({
   organizationId: z.string().uuid(),
@@ -23,6 +24,7 @@ type ContactValidationResult = {
   contactId: string | null;
   status: "valid" | "risky" | "invalid";
   score: number;
+  classification: LeadClassification;
   reasons: string[];
 };
 
@@ -45,6 +47,9 @@ function summarize(results: ContactValidationResult[]) {
     valid: results.filter((item) => item.status === "valid").length,
     risky: results.filter((item) => item.status === "risky").length,
     invalid: results.filter((item) => item.status === "invalid").length,
+    hot: results.filter((item) => item.classification === "HOT").length,
+    warm: results.filter((item) => item.classification === "WARM").length,
+    cold: results.filter((item) => item.classification === "COLD").length,
   };
 }
 
@@ -130,6 +135,7 @@ export async function POST(request: Request) {
       if (catchAll) reasons.push("Hunter catch-all detected");
 
       const score = toFinalScore(finalStatus, validation.score);
+      const classification = classifyReachIqScore(score);
 
       const { error: insertError } = await supabase.from("validation_results").insert({
         organization_id: body.organizationId,
@@ -137,6 +143,7 @@ export async function POST(request: Request) {
         contact_id: contactId,
         validation_status: finalStatus,
         score,
+        classification,
         reasons,
         validated_at: new Date().toISOString(),
         deleted_at: null,
@@ -151,6 +158,7 @@ export async function POST(request: Request) {
         contactId,
         status: finalStatus,
         score,
+        classification,
         reasons,
       });
     }
