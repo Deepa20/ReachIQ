@@ -26,28 +26,30 @@ export function ValidateModulePanel({ organizationId }: ValidateModulePanelProps
           onSubmit={(event) => {
             event.preventDefault();
             const formData = new FormData(event.currentTarget);
-            startTransition(async () => {
-              const response = await fetch("/api/v1/validate/uploads", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  organizationId,
-                  fileName: formData.get("fileName"),
-                  filePath: formData.get("filePath"),
-                  mimeType: formData.get("mimeType"),
-                  rowCount: Number(formData.get("rowCount") ?? 0),
-                }),
-              });
+            startTransition(() => {
+              void (async () => {
+                const response = await fetch("/api/v1/validate/uploads", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    organizationId,
+                    fileName: formData.get("fileName"),
+                    filePath: formData.get("filePath"),
+                    mimeType: formData.get("mimeType"),
+                    rowCount: Number(formData.get("rowCount") ?? 0),
+                  }),
+                });
 
-              const payload = (await response.json()) as { message?: string; error?: string };
-              if (!response.ok) {
-                setMessage(payload.error ?? "Unable to create upload");
-                return;
-              }
-              setMessage(payload.message ?? "Upload registered");
-              event.currentTarget.reset();
+                const payload = (await response.json()) as { message?: string; error?: string };
+                if (!response.ok) {
+                  setMessage(payload.error ?? "Unable to create upload");
+                  return;
+                }
+                setMessage(payload.message ?? "Upload registered");
+                event.currentTarget.reset();
+              })();
             });
           }}
         >

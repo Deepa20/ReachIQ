@@ -27,26 +27,28 @@ export function SignalModulePanel({ organizationId }: SignalModulePanelProps) {
           onSubmit={(event) => {
             event.preventDefault();
             const formData = new FormData(event.currentTarget);
-            startTransition(async () => {
-              const response = await fetch("/api/v1/signal", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  organizationId,
-                  signalType: formData.get("signalType"),
-                  strength: Number(formData.get("strength") ?? 1),
-                  summary: formData.get("summary"),
-                  sourceUrl: formData.get("sourceUrl"),
-                }),
-              });
+            startTransition(() => {
+              void (async () => {
+                const response = await fetch("/api/v1/signal", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    organizationId,
+                    signalType: formData.get("signalType"),
+                    strength: Number(formData.get("strength") ?? 1),
+                    summary: formData.get("summary"),
+                    sourceUrl: formData.get("sourceUrl"),
+                  }),
+                });
 
-              const payload = (await response.json()) as { message?: string; error?: string };
-              if (!response.ok) {
-                setMessage(payload.error ?? "Unable to create signal");
-                return;
-              }
-              setMessage(payload.message ?? "Signal created");
-              event.currentTarget.reset();
+                const payload = (await response.json()) as { message?: string; error?: string };
+                if (!response.ok) {
+                  setMessage(payload.error ?? "Unable to create signal");
+                  return;
+                }
+                setMessage(payload.message ?? "Signal created");
+                event.currentTarget.reset();
+              })();
             });
           }}
         >

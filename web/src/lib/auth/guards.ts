@@ -40,7 +40,7 @@ export async function requireActiveMembership(): Promise<ActiveMembership> {
   const membership = memberships?.[0] as
     | {
         role: AppRole;
-        organizations: { id: string; name: string; slug: string };
+        organizations: { id: string; name: string; slug: string } | Array<{ id: string; name: string; slug: string }>;
       }
     | undefined;
 
@@ -48,10 +48,16 @@ export async function requireActiveMembership(): Promise<ActiveMembership> {
     redirect("/onboarding");
   }
 
+  const organization = Array.isArray(membership.organizations) ? membership.organizations[0] : membership.organizations;
+
+  if (!organization) {
+    redirect("/onboarding");
+  }
+
   return {
-    organizationId: membership.organizations.id,
-    organizationName: membership.organizations.name,
-    organizationSlug: membership.organizations.slug,
+    organizationId: organization.id,
+    organizationName: organization.name,
+    organizationSlug: organization.slug,
     role: membership.role,
   };
 }

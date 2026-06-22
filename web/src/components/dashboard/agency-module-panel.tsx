@@ -28,28 +28,30 @@ export function AgencyModulePanel({ organizationId }: AgencyModulePanelProps) {
             event.preventDefault();
             const formData = new FormData(event.currentTarget);
 
-            startTransition(async () => {
-              const response = await fetch("/api/v1/agency/campaigns", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  organizationId,
-                  name: formData.get("name"),
-                  module: formData.get("module"),
-                  status: formData.get("status"),
-                  config: {
-                    objective: formData.get("objective"),
-                  },
-                }),
-              });
+            startTransition(() => {
+              void (async () => {
+                const response = await fetch("/api/v1/agency/campaigns", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    organizationId,
+                    name: formData.get("name"),
+                    module: formData.get("module"),
+                    status: formData.get("status"),
+                    config: {
+                      objective: formData.get("objective"),
+                    },
+                  }),
+                });
 
-              const payload = (await response.json()) as { message?: string; error?: string };
-              if (!response.ok) {
-                setMessage(payload.error ?? "Unable to create campaign");
-                return;
-              }
-              setMessage(payload.message ?? "Campaign created");
-              event.currentTarget.reset();
+                const payload = (await response.json()) as { message?: string; error?: string };
+                if (!response.ok) {
+                  setMessage(payload.error ?? "Unable to create campaign");
+                  return;
+                }
+                setMessage(payload.message ?? "Campaign created");
+                event.currentTarget.reset();
+              })();
             });
           }}
         >

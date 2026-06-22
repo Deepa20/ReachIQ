@@ -1,7 +1,8 @@
 import Link from "next/link";
 
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type ModuleSummaryCardProps = {
   title: string;
@@ -18,9 +19,9 @@ export function ModuleSummaryCard({ title, description, href }: ModuleSummaryCar
       </CardHeader>
       <CardContent />
       <CardFooter>
-        <Button asChild variant="secondary" className="w-full">
-          <Link href={href}>Open module</Link>
-        </Button>
+        <Link href={href} className={cn(buttonVariants({ variant: "secondary" }), "w-full")}>
+          Open module
+        </Link>
       </CardFooter>
     </Card>
   );
