@@ -1,130 +1,153 @@
-# ReachIQ
+# ReachIQ MVP (Next.js 15 + Supabase)
 
-**Smarter Outreach. Faster Pipeline.**
+Production-ready multi-tenant SaaS foundation for ReachIQ with:
 
-ReachIQ is a full-stack product prototype for a B2B outreach automation platform serving Canadian SMBs and agencies. It implements the core workflows from the feature specification:
+- **Frontend:** Next.js 15, TypeScript, Tailwind CSS, shadcn-style UI components
+- **Backend:** Supabase PostgreSQL, Supabase Auth, Supabase Storage
+- **Architecture:** multi-tenant + agency-ready + row-level security + API-first
 
-- **ReachIQ Validate:** CSV contact upload, six-step email validation, enrichment, Hot/Warm/Cold scoring, ICP fit scoring, outreach copy generation, clean CSV export, and CRM export targets.
-- **ReachIQ Signal:** target account monitoring, buying-signal scoring, weekly report payloads, real-time priority alerts, urgency labels, and signal-to-outreach context.
-- **ReachIQ Agency:** agency dashboard, white-label settings, client usage metrics, sequence templates, billing usage, and branded client report framing.
-- **Platform-wide features:** integrations hub, analytics summary, compliance checks for CASL/PIPEDA/Quebec Law 25/GDPR, role coverage, retention policy metadata, and audit event creation.
+## What is implemented
 
-The external paid data/AI providers in the product spec are represented by deterministic local services so the app runs immediately without API keys. The backend is structured so Hunter, Apollo, Clearbit, BuiltWith, Claude, SendGrid, HubSpot, Salesforce, Stripe, and Slack adapters can replace the local implementations later without changing the UI contract.
+### 1) Authentication
 
-## Tech stack
+- Sign up (`/sign-up`)
+- Login (`/login`)
+- Password reset request (`/reset-password`)
+- Update password (`/update-password`)
+- Auth callback exchange (`/auth/callback`)
+- Session-protected dashboard routes via middleware
 
-- **Frontend:** React, TypeScript, Vite
-- **Backend:** Python, FastAPI, Pydantic, Supabase PostgREST
-- **Tests:** pytest + FastAPI TestClient
+### 2) Dashboard layout
 
-## Repository layout
+- Sidebar navigation
+- Header with profile menu + logout
+- Usage metric cards
+- Tenant-aware workspace shell
+
+### 3) Core modules
+
+- **ReachIQ Validate:** upload registration and validation-result APIs/pages
+- **ReachIQ Signal:** signal capture and timeline APIs/pages
+- **ReachIQ Agency:** campaign creation and subscription overview APIs/pages
+
+### 4) Database schema + RLS
+
+Supabase migration includes all required tables:
+
+- `users`
+- `organizations`
+- `contacts`
+- `companies`
+- `uploads`
+- `validation_results`
+- `enrichment_results`
+- `signals`
+- `campaigns`
+- `ai_emails`
+- `subscriptions`
+- `audit_logs`
+
+Plus:
+
+- `organization_members` (multi-tenant memberships/roles)
+- RLS helper functions
+- Storage bucket + policies for uploads
+- Triggers for `updated_at`, user profile sync, organization owner membership
+
+## Folder structure
 
 ```text
 .
-├── backend
-│   ├── app
-│   │   ├── main.py        # FastAPI routes and request/response orchestration
-│   │   └── services.py    # Validation, enrichment, scoring, outreach, signals, compliance
-│   ├── requirements.txt
-│   ├── supabase
-│   │   └── schema.sql    # Starter Supabase tables for persistence
-│   └── tests
-│       └── test_api.py
-├── frontend
+├── supabase
+│   └── migrations
+│       └── 20260622000000_reachiq_mvp.sql
+├── web
 │   ├── src
-│   │   ├── App.tsx        # Product dashboard
-│   │   ├── main.tsx
-│   │   └── styles.css
-│   └── vite.config.ts
+│   │   ├── app
+│   │   │   ├── (auth)
+│   │   │   │   ├── login
+│   │   │   │   ├── sign-up
+│   │   │   │   ├── reset-password
+│   │   │   │   └── update-password
+│   │   │   ├── (dashboard)/dashboard
+│   │   │   │   ├── validate
+│   │   │   │   ├── signal
+│   │   │   │   └── agency
+│   │   │   └── api/v1
+│   │   │       ├── auth/session
+│   │   │       ├── validate/{upload-url,uploads,results}
+│   │   │       ├── signal
+│   │   │       ├── agency/campaigns
+│   │   │       └── usage/metrics
+│   │   ├── components
+│   │   │   ├── dashboard
+│   │   │   └── ui
+│   │   └── lib
+│   │       ├── auth
+│   │       ├── api
+│   │       ├── data
+│   │       └── supabase
+│   ├── middleware.ts
+│   └── .env.example
+├── .env.example
 └── package.json
 ```
 
-## Run locally
+## Environment variables
 
-### Backend
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-cp .env.example .env
-uvicorn app.main:app --app-dir backend --reload --port 8000
-```
-
-Set the Supabase values in `.env` or your deployment environment:
+Create `.env.local` in `web/` (or root `.env`) with:
 
 ```bash
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-server-side-service-role-key
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` is preferred for server-side writes. `SUPABASE_ANON_KEY` is supported as a fallback for read-only/table-policy constrained environments.
+## Setup instructions
 
-### Frontend
+### 1) Apply Supabase migration
+
+Run in Supabase SQL Editor:
+
+`supabase/migrations/20260622000000_reachiq_mvp.sql`
+
+### 2) Install dependencies
 
 ```bash
 npm install
+```
+
+### 3) Run application
+
+```bash
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Open: `http://localhost:3000`
 
-The frontend defaults to `http://localhost:8000` for API calls. Override with:
-
-```bash
-VITE_API_URL=https://your-api.example npm run dev
-```
-
-## Verify
+### 4) Verify
 
 ```bash
+npm run lint
 npm run build
-npm test
 ```
 
-## API overview
+## API routes
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /api/health` | Health check |
-| `GET /api/platform/blueprint` | Module, integration, role, and compliance coverage |
-| `GET /api/supabase/status` | Show whether Supabase credentials are configured |
-| `GET /api/supabase/{table}` | Select rows from a Supabase table via PostgREST |
-| `POST /api/supabase/{table}/insert` | Insert one or more rows into a Supabase table |
-| `POST /api/supabase/{table}/upsert` | Upsert rows into a Supabase table with optional conflict target |
-| `POST /api/supabase/validation-runs` | Run contact validation and persist the validation run plus contacts |
-| `POST /api/validate/contacts` | Validate, enrich, score, segment, and generate outreach for contacts |
-| `POST /api/validate/csv` | Parse CSV text and run the same validation pipeline |
-| `POST /api/outreach/generate` | Generate subject lines, email body, personalisation preview, and follow-ups |
-| `POST /api/signal/scan` | Scan target accounts and return account intelligence plus weekly report data |
-| `POST /api/compliance/evaluate` | Evaluate CASL, Quebec Law 25, GDPR, unsubscribe, retention, and audit metadata |
-| `POST /api/agency/white-label` | Generate agency branding and setup checklist |
-| `GET /api/agency/dashboard` | Client usage, reporting, sequence templates, and billing metrics |
-| `GET /api/analytics/summary` | Campaign, signal ROI, list health, and AI performance metrics |
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/health` | Service health |
+| GET | `/api/v1/auth/session` | Current authenticated user session |
+| POST | `/api/v1/validate/upload-url` | Create signed Supabase Storage upload URL |
+| GET/POST | `/api/v1/validate/uploads` | List/create upload records |
+| GET/POST | `/api/v1/validate/results` | List/create validation results |
+| GET/POST | `/api/v1/signal` | List/create account signals |
+| GET/POST | `/api/v1/agency/campaigns` | List/create agency campaigns |
+| GET | `/api/v1/usage/metrics` | Tenant usage counters |
 
-## Product notes
+## Notes
 
-- Invalid contacts are removed from AI generation and marked `REMOVED`.
-- HOT contacts receive generated outreach; WARM contacts receive a nurture draft; COLD contacts are marked for monitoring.
-- All generated outreach uses already-structured contact/signal data, matching the spec's low-cost AI architecture.
-- Compliance metadata is returned per contact so export/send workflows can suppress risky records before activation.
-- Without Supabase environment variables, the app remains in local-demo mode and the Supabase write endpoints return `503` with the missing configuration values.
-
-## Supabase setup
-
-1. Create a Supabase project.
-2. Open the Supabase SQL editor.
-3. Run `backend/supabase/schema.sql`.
-4. Add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to your backend environment.
-5. Start the backend and check `GET /api/supabase/status`.
-
-The starter schema includes:
-
-- `validation_runs`
-- `contacts`
-- `target_accounts`
-- `signal_events`
-- `white_label_settings`
-- `audit_logs`
-
-Row-level security is enabled in the schema. The backend should use the service-role key for trusted server-side writes; add user-specific RLS policies before exposing direct browser access to tables.
+- No mock seed data is included.
+- Empty states are expected until real records are created.
+- All data access is tenant-scoped by organization and enforced through RLS.
