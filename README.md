@@ -109,6 +109,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 HUNTER_API_KEY=your-hunter-api-key
+APOLLO_API_KEY=your-apollo-api-key
 ```
 
 ## Setup instructions
@@ -152,6 +153,7 @@ npm run build
 | GET | `/api/v1/validate/contacts` | Fetch processed contact-level validation/enrichment/score detail |
 | GET/POST | `/api/v1/validate/results` | List/create validation results |
 | POST | `/api/validate` | Hunter.io batch email validation (`valid` / `risky` / `invalid`) |
+| POST | `/api/enrich` | Apollo batch contact enrichment and persistence into `enrichment_results` |
 | GET/POST | `/api/v1/signal` | List/create account signals |
 | GET/POST | `/api/v1/agency/campaigns` | List/create agency campaigns |
 | GET | `/api/v1/usage/metrics` | Tenant usage counters |
@@ -162,6 +164,7 @@ npm run build
 - Empty states are expected until real records are created.
 - All data access is tenant-scoped by organization and enforced through RLS.
 - Hunter integration uses in-process request throttling (default 50 req/min, configurable via `HUNTER_RATE_LIMIT_PER_MINUTE`).
+- Apollo integration retries failed provider calls (default 3 attempts, configurable via `APOLLO_MAX_RETRIES`).
 
 ## Supabase deployment
 
