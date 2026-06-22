@@ -97,8 +97,9 @@ export async function POST(request: Request) {
         throw new ApiError(500, accountError.message);
       }
 
-      previousScore = account.signal_score ?? 0;
-      newScore = calculateAccountSignalScore(previousScore, signalScore);
+      const currentScore = account.signal_score ?? 0;
+      previousScore = currentScore;
+      newScore = calculateAccountSignalScore(currentScore, signalScore);
 
       const { error: updateAccountError } = await supabase
         .from("accounts")
