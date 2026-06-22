@@ -147,7 +147,8 @@ npm run build
 | GET | `/api/health` | Service health |
 | GET | `/api/v1/auth/session` | Current authenticated user session |
 | POST | `/api/v1/validate/upload-url` | Create signed Supabase Storage upload URL |
-| GET/POST | `/api/v1/validate/uploads` | List/create upload records |
+| GET/POST | `/api/v1/validate/uploads` | List uploads or run full CSV validation pipeline upload |
+| GET | `/api/v1/validate/contacts` | Fetch processed contact-level validation/enrichment/score detail |
 | GET/POST | `/api/v1/validate/results` | List/create validation results |
 | GET/POST | `/api/v1/signal` | List/create account signals |
 | GET/POST | `/api/v1/agency/campaigns` | List/create agency campaigns |

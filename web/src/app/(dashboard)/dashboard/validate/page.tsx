@@ -89,15 +89,24 @@ export default async function ValidatePage() {
                   <tbody>
                     {validationResults.map((result) => {
                       const contact = Array.isArray(result.contacts) ? result.contacts[0] : result.contacts;
-                      const company = contact && Array.isArray(contact.companies) ? contact.companies[0] : contact?.companies;
-                      const fullName = [contact?.first_name, contact?.last_name].filter(Boolean).join(" ");
-                      const temperature = (contact?.metadata as { temperature?: string } | null)?.temperature ?? "N/A";
+                      const contactRecord = contact as {
+                        first_name?: string | null;
+                        last_name?: string | null;
+                        email?: string | null;
+                        title?: string | null;
+                        metadata?: { temperature?: string } | null;
+                        companies?: { name?: string | null } | Array<{ name?: string | null }> | null;
+                      } | null;
+                      const company = contactRecord?.companies;
+                      const companyName = Array.isArray(company) ? company[0]?.name : company?.name;
+                      const fullName = [contactRecord?.first_name, contactRecord?.last_name].filter(Boolean).join(" ");
+                      const temperature = contactRecord?.metadata?.temperature ?? "N/A";
                       return (
                         <tr key={result.id} className="border-t border-slate-200">
                           <td className="px-3 py-2">
-                            <p className="font-medium text-slate-900">{contact?.email ?? "Unknown email"}</p>
+                            <p className="font-medium text-slate-900">{contactRecord?.email ?? "Unknown email"}</p>
                             <p className="text-slate-500">
-                              {fullName || "Unknown"} • {contact?.title || "No title"} • {company?.name || "No company"}
+                              {fullName || "Unknown"} • {contactRecord?.title || "No title"} • {companyName || "No company"}
                             </p>
                             <p className="text-slate-400">{new Date(result.validated_at).toLocaleString()}</p>
                           </td>
