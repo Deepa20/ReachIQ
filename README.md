@@ -110,6 +110,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 HUNTER_API_KEY=your-hunter-api-key
 APOLLO_API_KEY=your-apollo-api-key
+ANTHROPIC_API_KEY=your-anthropic-api-key
 ```
 
 ## Setup instructions
@@ -156,6 +157,7 @@ npm run build
 | POST | `/api/enrich` | Apollo batch contact enrichment and persistence into `enrichment_results` |
 | GET/POST | `/api/v1/signal` | List/create account signals |
 | GET/POST | `/api/v1/agency/campaigns` | List/create agency campaigns |
+| POST | `/api/generate-email` | Generate Claude Haiku personalized outreach email and store in `ai_emails` |
 | GET | `/api/v1/usage/metrics` | Tenant usage counters |
 
 ## Notes
