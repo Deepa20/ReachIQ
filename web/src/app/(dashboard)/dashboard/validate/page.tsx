@@ -4,13 +4,31 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { requireActiveMembership } from "@/lib/auth/guards";
 import { getSupabaseServerClient } from "@/lib/supabase/server-client";
 
+function validationVariant(status: string): "success" | "warning" | "danger" {
+  if (status === "valid") return "success";
+  if (status === "risky") return "warning";
+  return "danger";
+}
+
 export default async function ValidatePage() {
   const membership = await requireActiveMembership();
   const supabase = await getSupabaseServerClient();
 
   const [{ data: uploads, error: uploadsError }, { data: validationResults, error: resultsError }] = await Promise.all([
-    supabase.from("uploads").select("id,file_name,row_count,status,created_at").eq("organization_id", membership.organizationId).order("created_at", { ascending: false }).limit(20),
-    supabase.from("validation_results").select("id,validation_status,score,validated_at").eq("organization_id", membership.organizationId).order("validated_at", { ascending: false }).limit(20),
+    supabase
+      .from("uploads")
+      .select("id,file_name,row_count,status,created_at")
+      .eq("organization_id", membership.organizationId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("validation_results")
+      .select("id,validation_status,score,reasons,validated_at,contacts(id,first_name,last_name,email,title,metadata,companies(name,domain),enrichment_results(provider,payload,enriched_at))")
+      .eq("organization_id", membership.organizationId)
+      .is("deleted_at", null)
+      .order("validated_at", { ascending: false })
+      .limit(100),
   ]);
 
   if (uploadsError) {
@@ -54,22 +72,50 @@ export default async function ValidatePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Validation results</CardTitle>
-            <CardDescription>Data from `validation_results` table</CardDescription>
+            <CardTitle>Processed contacts</CardTitle>
+            <CardDescription>Validation status, score, and contact detail from the pipeline.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent>
             {validationResults?.length ? (
-              validationResults.map((result) => (
-                <article key={result.id} className="rounded-md border border-slate-200 p-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-slate-900">{result.validation_status}</p>
-                    <p className="text-slate-500">Score {result.score}</p>
-                  </div>
-                  <p className="text-slate-500">{new Date(result.validated_at).toLocaleString()}</p>
-                </article>
-              ))
+              <div className="overflow-x-auto rounded-md border border-slate-200">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2">Contact Detail</th>
+                      <th className="px-3 py-2">Validation Status</th>
+                      <th className="px-3 py-2">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {validationResults.map((result) => {
+                      const contact = Array.isArray(result.contacts) ? result.contacts[0] : result.contacts;
+                      const company = contact && Array.isArray(contact.companies) ? contact.companies[0] : contact?.companies;
+                      const fullName = [contact?.first_name, contact?.last_name].filter(Boolean).join(" ");
+                      const temperature = (contact?.metadata as { temperature?: string } | null)?.temperature ?? "N/A";
+                      return (
+                        <tr key={result.id} className="border-t border-slate-200">
+                          <td className="px-3 py-2">
+                            <p className="font-medium text-slate-900">{contact?.email ?? "Unknown email"}</p>
+                            <p className="text-slate-500">
+                              {fullName || "Unknown"} • {contact?.title || "No title"} • {company?.name || "No company"}
+                            </p>
+                            <p className="text-slate-400">{new Date(result.validated_at).toLocaleString()}</p>
+                          </td>
+                          <td className="px-3 py-2">
+                            <Badge variant={validationVariant(result.validation_status)}>{result.validation_status.toUpperCase()}</Badge>
+                          </td>
+                          <td className="px-3 py-2">
+                            <p className="font-semibold text-slate-900">{result.score}</p>
+                            <p className="text-slate-500">{temperature}</p>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             ) : (
-              <p className="text-sm text-slate-500">No validation results yet.</p>
+              <p className="text-sm text-slate-500">No processed contacts yet. Upload a CSV to run the pipeline.</p>
             )}
           </CardContent>
         </Card>

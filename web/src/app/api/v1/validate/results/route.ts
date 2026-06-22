@@ -25,8 +25,9 @@ export async function GET(request: Request) {
     const { supabase } = await requireOrganizationMembership(organizationId);
     const { data, error } = await supabase
       .from("validation_results")
-      .select("id,validation_status,score,reasons,validated_at")
+      .select("id,validation_status,score,reasons,validated_at,contact_id,contacts(id,first_name,last_name,email,title,linkedin_url,metadata)")
       .eq("organization_id", organizationId)
+      .is("deleted_at", null)
       .eq("upload_id", uploadId)
       .order("validated_at", { ascending: false });
 
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
         validation_status: body.validationStatus,
         score: body.score,
         reasons: body.reasons,
+        deleted_at: null,
       })
       .select("id,validation_status,score,validated_at")
       .single();

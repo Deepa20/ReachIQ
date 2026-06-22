@@ -152,6 +152,33 @@ create table if not exists public.uploads (
   deleted_at timestamptz null
 );
 
+create table if not exists public.validation_results (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete restrict,
+  upload_id uuid not null references public.uploads(id) on delete cascade,
+  contact_id uuid null references public.contacts(id) on delete set null,
+  validation_status text not null check (validation_status in ('valid', 'risky', 'invalid')),
+  score integer not null default 0 check (score between 0 and 100),
+  reasons jsonb not null default '[]'::jsonb,
+  validated_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz null
+);
+
+create table if not exists public.enrichment_results (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete restrict,
+  contact_id uuid not null references public.contacts(id) on delete cascade,
+  provider text not null,
+  payload jsonb not null default '{}'::jsonb,
+  enriched_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz null,
+  unique (organization_id, contact_id, provider)
+);
+
 create table if not exists public.ai_emails (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete restrict,
@@ -174,6 +201,8 @@ create index if not exists idx_contacts_org on public.contacts (organization_id)
 create index if not exists idx_campaigns_org on public.campaigns (organization_id) where deleted_at is null;
 create index if not exists idx_signals_org on public.signals (organization_id) where deleted_at is null;
 create index if not exists idx_uploads_org on public.uploads (organization_id) where deleted_at is null;
+create index if not exists idx_validation_results_org on public.validation_results (organization_id) where deleted_at is null;
+create index if not exists idx_enrichment_results_org on public.enrichment_results (organization_id) where deleted_at is null;
 create index if not exists idx_ai_emails_org on public.ai_emails (organization_id) where deleted_at is null;
 
 drop trigger if exists organizations_set_updated_at on public.organizations;
@@ -209,6 +238,16 @@ for each row execute function app.set_updated_at();
 drop trigger if exists uploads_set_updated_at on public.uploads;
 create trigger uploads_set_updated_at
 before update on public.uploads
+for each row execute function app.set_updated_at();
+
+drop trigger if exists validation_results_set_updated_at on public.validation_results;
+create trigger validation_results_set_updated_at
+before update on public.validation_results
+for each row execute function app.set_updated_at();
+
+drop trigger if exists enrichment_results_set_updated_at on public.enrichment_results;
+create trigger enrichment_results_set_updated_at
+before update on public.enrichment_results
 for each row execute function app.set_updated_at();
 
 drop trigger if exists ai_emails_set_updated_at on public.ai_emails;
@@ -283,6 +322,8 @@ alter table public.contacts enable row level security;
 alter table public.campaigns enable row level security;
 alter table public.signals enable row level security;
 alter table public.uploads enable row level security;
+alter table public.validation_results enable row level security;
+alter table public.enrichment_results enable row level security;
 alter table public.ai_emails enable row level security;
 
 -- organizations policies
@@ -381,6 +422,28 @@ for insert with check (
 );
 drop policy if exists uploads_update_own_org on public.uploads;
 create policy uploads_update_own_org on public.uploads
+for update using (organization_id = app.current_organization_id())
+with check (organization_id = app.current_organization_id());
+
+drop policy if exists validation_results_select_own_org on public.validation_results;
+create policy validation_results_select_own_org on public.validation_results
+for select using (organization_id = app.current_organization_id() and deleted_at is null);
+drop policy if exists validation_results_insert_own_org on public.validation_results;
+create policy validation_results_insert_own_org on public.validation_results
+for insert with check (organization_id = app.current_organization_id());
+drop policy if exists validation_results_update_own_org on public.validation_results;
+create policy validation_results_update_own_org on public.validation_results
+for update using (organization_id = app.current_organization_id())
+with check (organization_id = app.current_organization_id());
+
+drop policy if exists enrichment_results_select_own_org on public.enrichment_results;
+create policy enrichment_results_select_own_org on public.enrichment_results
+for select using (organization_id = app.current_organization_id() and deleted_at is null);
+drop policy if exists enrichment_results_insert_own_org on public.enrichment_results;
+create policy enrichment_results_insert_own_org on public.enrichment_results
+for insert with check (organization_id = app.current_organization_id());
+drop policy if exists enrichment_results_update_own_org on public.enrichment_results;
+create policy enrichment_results_update_own_org on public.enrichment_results
 for update using (organization_id = app.current_organization_id())
 with check (organization_id = app.current_organization_id());
 
