@@ -32,33 +32,39 @@ Production-ready multi-tenant SaaS foundation for ReachIQ with:
 
 ### 4) Database schema + RLS
 
-Supabase migration includes all required tables:
+Generated Supabase migration (`supabase/migration.sql`) includes:
 
-- `users`
 - `organizations`
+- `users`
 - `contacts`
 - `companies`
-- `uploads`
-- `validation_results`
-- `enrichment_results`
-- `signals`
 - `campaigns`
+- `signals`
+- `uploads`
 - `ai_emails`
-- `subscriptions`
-- `audit_logs`
 
-Plus:
+Every table has:
 
-- `organization_members` (multi-tenant memberships/roles)
-- RLS helper functions
-- Storage bucket + policies for uploads
-- Triggers for `updated_at`, user profile sync, organization owner membership
+- UUID primary key
+- `created_at`
+- `updated_at`
+- `deleted_at` (soft delete support)
+
+Also included:
+
+- Supabase Auth profile sync trigger (`auth.users` -> `public.users`)
+- Organization ownership bootstrap trigger
+- Organization-scoped RLS helper functions
+- RLS policies so authenticated users can only access records from their own organization
 
 ## Folder structure
 
 ```text
 .
 ├── supabase
+│   ├── config.toml
+│   ├── migration.sql
+│   ├── seed.sql
 │   └── migrations
 │       └── 20260622000000_reachiq_mvp.sql
 ├── web
@@ -106,11 +112,12 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 ## Setup instructions
 
-### 1) Apply Supabase migration
+### 1) Apply Supabase SQL files
 
-Run in Supabase SQL Editor:
+Run in Supabase SQL Editor (in this order):
 
-`supabase/migrations/20260622000000_reachiq_mvp.sql`
+1. `supabase/migration.sql`
+2. `supabase/seed.sql`
 
 ### 2) Install dependencies
 
@@ -148,6 +155,30 @@ npm run build
 
 ## Notes
 
-- No mock seed data is included.
+- No mock business data is included.
 - Empty states are expected until real records are created.
 - All data access is tenant-scoped by organization and enforced through RLS.
+
+## Supabase deployment
+
+### Option A: Supabase Dashboard (quickest)
+
+1. Open Supabase project -> SQL Editor.
+2. Run `supabase/migration.sql`.
+3. Run `supabase/seed.sql`.
+4. In Authentication settings, set:
+   - Site URL: `http://localhost:3000` (dev) and your production URL.
+   - Redirect URL: `https://<your-domain>/auth/callback`.
+5. Deploy app with environment variables from `.env.example`.
+
+### Option B: Supabase CLI
+
+1. Install and login:
+   - `supabase login`
+2. Link your project:
+   - `supabase link --project-ref <your-project-ref>`
+3. Create a migration file from `supabase/migration.sql` contents under `supabase/migrations/`.
+4. Push schema:
+   - `supabase db push`
+5. Run seed SQL:
+   - `supabase db execute --linked --file supabase/seed.sql`
