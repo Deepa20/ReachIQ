@@ -1,0 +1,19 @@
+{
+  "name": "reachiq",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ReachIQ multi-tenant SaaS MVP",
+  "workspaces": [
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix web run start",
+    "lint": "npm --prefix web run lint",
+    "test": "npm --prefix web run lint"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

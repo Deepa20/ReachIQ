@@ -1,0 +1,12 @@
+.git
+.github
+.cursor
+node_modules
+web/node_modules
+web/.next
+supabase/.branches
+supabase/.temp
+*.log
+.env
+.env.*
+!*.env.example
